@@ -40,21 +40,19 @@ export default async function ProductPage({
     .eq('id', id)
     .single()
 
-  // --- 【AI 智慧分析邏輯：自動備援版本】 ---
+  // --- 【AI 智慧分析邏輯：穩定高額度版本】 ---
   let aiAnalysis = "正在讀取 AI 行情分析數據...";
   
   if (post) {
-    // 定義優先選用的模型順序
-    const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-pro"];
+    // 這裡只保留 1.5 系列的穩定版模型，確保每天 1500 次的免費額度
+    const modelsToTry = ["gemini-1.5-flash", "gemini-1.5-flash-latest"];
     
     const fetchAIResponse = async () => {
-      // 確保 API KEY 存在
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
       
       for (const modelName of modelsToTry) {
         try {
-          // 在 Vercel Logs 中印出目前的嘗試狀態
-          console.log(`[系統監測] 正在嘗試呼叫模型: ${modelName}`);
+          console.log(`[系統監測] 正在嘗試呼叫高額度穩定模型: ${modelName}`);
           
           const model = genAI.getGenerativeModel({ model: modelName });
           const prompt = `你是一位專業的電腦硬體分析師。針對這筆 PTT 二手交易：
@@ -65,24 +63,21 @@ export default async function ProductPage({
           const result = await model.generateContent(prompt);
           const response = result.response.text();
           
-          // 如果走到這一步沒噴錯，代表成功了，直接回傳
-          console.log(`[系統監測] ${modelName} 請求成功！`);
+          console.log(`[系統監測] ${modelName} 請求成功！額度充足。`);
           return response;
           
         } catch (e: any) {
-          // 如果出錯（例如 503），印出紀錄並繼續跑下一個迴圈
-          console.error(`[系統監測] ${modelName} 暫時失效，準備備援切換。錯誤：`, e.message || e);
+          console.error(`[系統監測] ${modelName} 嘗試失敗。錯誤原因：`, e.message || e);
           continue; 
         }
       }
-      // 如果迴圈跑完都沒成功，就拋出最終錯誤
-      throw new Error("所有備援模型皆不可用");
+      throw new Error("所有穩定版模型暫時無法連線");
     };
 
     try {
       aiAnalysis = await fetchAIResponse();
     } catch (finalError) {
-      aiAnalysis = "AI 分析師目前全線維護中（可能是 Google 伺服器排隊人數過多），請參考原始報價資訊。";
+      aiAnalysis = "AI 分析師目前全線維護中（可能是 API 金鑰額度問題），請參考原始報價資訊。";
     }
   }
   // --- 【AI 智慧分析邏輯結束】 ---
@@ -162,7 +157,7 @@ export default async function ProductPage({
             </a>
             
             <p className="text-slate-600 text-xs leading-relaxed italic px-4">
-              * 本數據由 P-SEO 自動化監控系統擷取自 PTT HardwareSale。AI 由雙模型備援驅動，僅供行情參考。
+              * 本數據由 P-SEO 自動化監控系統擷取自 PTT HardwareSale。AI 分析由 Gemini 1.5 Flash 穩定版驅動。
             </p>
           </div>
         </div>
