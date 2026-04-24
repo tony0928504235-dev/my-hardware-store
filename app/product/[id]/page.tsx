@@ -55,6 +55,7 @@ export default async function ProductPage({
       const result = await model.generateContent(prompt);
       aiAnalysis = result.response.text();
     } catch (e) {
+        console.error("DEBUG_LOG:", e);
       aiAnalysis = "AI 分析師目前離線，請參考原始報價資訊。";
     }
   }
