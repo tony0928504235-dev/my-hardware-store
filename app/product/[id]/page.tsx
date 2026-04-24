@@ -1,14 +1,19 @@
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
+import { GoogleGenerativeAI } from "@google/generative-ai"
 
-// 初始化連線
+// 1. 設定：強制不緩存，確保資料即時
+export const revalidate = 0;
+
+// 2. 初始化連線
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-// 【新增：SEO 動態標題功能】
-// 這段程式碼會讓 Google 搜尋結果直接顯示「RTX 5080...」而不是「Product Page」
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+
+// 【SEO 動態標題功能】
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const { data: post } = await supabase
@@ -28,42 +33,54 @@ export default async function ProductPage({
 }: { 
   params: Promise<{ id: string }> 
 }) {
-  
-  // 1. 取得網址上的 id
   const { id } = await params
   
-  // 2. 抓取資料
+  // 3. 抓取資料
   const { data: post, error } = await supabase
     .from('硬體貼文')
     .select('*')
     .eq('id', id)
     .single()
 
-  // 3. 如果找不到資料，顯示自定義的電競風除錯畫面
+  // --- 【AI 智慧分析邏輯開始】 ---
+  let aiAnalysis = "正在讀取 AI 行情分析數據...";
+  if (post) {
+    try {
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const prompt = `你是一位專業的電腦硬體分析師。針對這筆交易：
+      名稱：${post.title}
+      價格：${post.price}
+      請以「義大資工學長」的語氣，在 80 字內分析這筆交易值不值得買，並給出建議。`;
+
+      const result = await model.generateContent(prompt);
+      aiAnalysis = result.response.text();
+    } catch (e) {
+      aiAnalysis = "AI 分析師目前離線，請參考原始報價資訊。";
+    }
+  }
+  // --- 【AI 智慧分析邏輯結束】 ---
+
   if (!post) {
     return (
       <div className="min-h-screen bg-[#0b0e14] flex flex-col items-center justify-center p-6 text-center">
-        <h1 className="text-3xl font-black text-white mb-4">404 - 找不到該硬體型號</h1>
-        <p className="text-slate-500 mb-10">目前網址抓到的 ID 是：<span className="text-red-500 font-mono">{id}</span></p>
-        <Link href="/" className="px-8 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-500 transition-all">
+        <h1 className="text-3xl font-black text-white mb-4 text-red-500">404 - 找不到該硬體型號</h1>
+        <p className="text-slate-500 mb-10 tracking-widest font-mono">ID: {id}</p>
+        <Link href="/" className="px-10 py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-500 transition-all">
           ← 返回行情總覽
         </Link>
       </div>
     )
   }
 
-  // 4. 成功抓到資料後的「電競風格」畫面
   return (
     <div className="min-h-screen bg-[#0b0e14] text-slate-200 font-sans p-6 md:p-12">
-      {/* 導覽列 */}
       <div className="max-w-4xl mx-auto mb-10">
-        <Link href="/" className="text-blue-400 hover:text-blue-300 transition-all flex items-center gap-2 font-bold">
-          ← 返回行情列表
+        <Link href="/" className="text-blue-400 hover:text-blue-300 transition-all flex items-center gap-2 font-bold group">
+          <span className="group-hover:-translate-x-1 transition-transform">←</span> 返回行情列表
         </Link>
       </div>
 
       <article className="max-w-4xl mx-auto bg-[#161b22] border border-slate-800 rounded-[2.5rem] overflow-hidden shadow-2xl shadow-blue-900/10">
-        {/* 頂部發光線條 */}
         <div className="h-2 bg-gradient-to-r from-blue-600 via-indigo-500 to-red-500" />
         
         <div className="p-8 md:p-14">
@@ -78,8 +95,7 @@ export default async function ProductPage({
             {post.title}
           </h1>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
-            {/* 價格面板 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
             <div className="bg-[#1c2128] p-10 rounded-[2rem] border border-slate-700/50 relative overflow-hidden group hover:border-blue-500/50 transition-all">
               <p className="text-xs text-slate-500 font-bold mb-3 uppercase tracking-widest">PTT 監測行情</p>
               <p className="text-6xl font-mono font-black text-blue-500 group-hover:scale-105 transition-transform duration-500">
@@ -88,22 +104,28 @@ export default async function ProductPage({
               <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-blue-500/5 rounded-full blur-3xl" />
             </div>
 
-            {/* 時間面板 */}
             <div className="bg-[#1c2128] p-10 rounded-[2rem] border border-slate-700/50 flex flex-col justify-center">
               <p className="text-xs text-slate-500 font-bold mb-3 uppercase tracking-widest">數據更新時間</p>
-              <p className="text-2xl font-bold text-slate-300">
+              <p className="text-2xl font-bold text-slate-300 font-mono">
                 {new Date(post.created_at).toLocaleString('zh-TW')}
               </p>
             </div>
           </div>
 
-          <div className="space-y-6">
-            <div className="p-6 bg-slate-900/50 rounded-2xl border border-slate-800">
-              <p className="text-slate-500 text-sm leading-relaxed">
-                * 本數據由 P-SEO 自動化監控系統從 PTT HardwareSale 擷取。價格為觀測當下之紀錄，實際成交價請參考原始貼文。
-              </p>
-            </div>
-            
+          {/* --- 新增：Tony AI 分析區塊 --- */}
+          <div className="bg-gradient-to-br from-blue-600/10 to-indigo-600/10 p-8 rounded-[2rem] border border-blue-500/30 mb-10 relative overflow-hidden group">
+             <div className="flex items-center gap-2 mb-4">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                <h2 className="text-blue-400 font-black uppercase text-xs tracking-widest">Tony AI 智慧診斷</h2>
+             </div>
+             <p className="text-xl text-slate-300 leading-relaxed font-medium italic relative z-10">
+                "{aiAnalysis}"
+             </p>
+             {/* 裝飾背光 */}
+             <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 -translate-y-1/2 translate-x-1/2 blur-2xl group-hover:bg-blue-500/10 transition-all" />
+          </div>
+
+          <div className="space-y-6 text-center">
             <a 
               href={post.link} 
               target="_blank" 
@@ -112,13 +134,17 @@ export default async function ProductPage({
             >
               前往 PTT 原始貼文驗證 ↗
             </a>
+            
+            <p className="text-slate-600 text-xs leading-relaxed italic">
+              * 本數據由 P-SEO 自動化監控系統擷取，AI 分析僅供參考，實際交易請謹慎判斷。
+            </p>
           </div>
         </div>
       </article>
       
       <footer className="max-w-4xl mx-auto mt-12 text-center">
-        <p className="text-slate-600 text-xs font-medium">
-          © 2026 CSIE Tony Lin Hardware Monitoring System. All Rights Reserved.
+        <p className="text-slate-600 text-xs font-mono uppercase tracking-[0.2em]">
+          © 2026 CSIE Tony Lin Hardware Monitoring System.
         </p>
       </footer>
     </div>

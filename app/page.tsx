@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
-
+export const revalidate = 0; // 這代表：不要緩存，每一秒鐘都要檢查資料庫
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
