@@ -40,21 +40,26 @@ export default async function ProductPage({
     .eq('id', id)
     .single()
 
-  // --- 【AI 智慧分析邏輯：穩定高額度版本】 ---
+  // --- 【AI 智慧分析邏輯：正式版穩定通道】 ---
   let aiAnalysis = "正在讀取 AI 行情分析數據...";
   
   if (post) {
-    // 這裡只保留 1.5 系列的穩定版模型，確保每天 1500 次的免費額度
-    const modelsToTry = ["gemini-1.5-flash", "gemini-1.5-flash-latest"];
+    // 使用穩定版型號，每天擁有 1500 次的充足額度
+    const modelsToTry = ["gemini-1.5-flash"];
     
     const fetchAIResponse = async () => {
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
       
       for (const modelName of modelsToTry) {
         try {
-          console.log(`[系統監測] 正在嘗試呼叫高額度穩定模型: ${modelName}`);
+          console.log(`[系統監測] 正在連線正式版模型: ${modelName} (API 版本: v1)`);
           
-          const model = genAI.getGenerativeModel({ model: modelName });
+          // 【核心修正點】強制指定 apiVersion 為 'v1'，避開測試版的 404 錯誤
+          const model = genAI.getGenerativeModel(
+            { model: modelName },
+            { apiVersion: 'v1' }
+          );
+
           const prompt = `你是一位專業的電腦硬體分析師。針對這筆 PTT 二手交易：
           名稱：${post.title}
           價格：${post.price}
@@ -63,21 +68,21 @@ export default async function ProductPage({
           const result = await model.generateContent(prompt);
           const response = result.response.text();
           
-          console.log(`[系統監測] ${modelName} 請求成功！額度充足。`);
+          console.log(`[系統監測] ${modelName} 成功回應！`);
           return response;
           
         } catch (e: any) {
-          console.error(`[系統監測] ${modelName} 嘗試失敗。錯誤原因：`, e.message || e);
+          console.error(`[系統監測] ${modelName} 請求失敗。原因：`, e.message || e);
           continue; 
         }
       }
-      throw new Error("所有穩定版模型暫時無法連線");
+      throw new Error("所有 AI 模型連線失敗");
     };
 
     try {
       aiAnalysis = await fetchAIResponse();
     } catch (finalError) {
-      aiAnalysis = "AI 分析師目前全線維護中（可能是 API 金鑰額度問題），請參考原始報價資訊。";
+      aiAnalysis = "AI 分析師目前全線維護中，請參考原始報價資訊。";
     }
   }
   // --- 【AI 智慧分析邏輯結束】 ---
