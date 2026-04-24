@@ -1,16 +1,35 @@
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
-export const revalidate = 0; // 這代表：不要緩存，每一秒鐘都要檢查資料庫
+import SearchInput from '@/components/SearchInput' // 引入你剛才建好的零件
+
+export const revalidate = 0; // 維持不緩存，即時更新
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-export default async function Home() {
-  const { data: posts, error } = await supabase
-    .from('硬體貼文') // 【關鍵】這裡要改成中文名稱
+// Next.js 15 規範：首頁組件接收 searchParams 作為 Promise
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
+  // 1. 解析網址傳過來的搜尋關鍵字 (?q=xxx)
+  const { q: query } = await searchParams;
+
+  // 2. 建立資料庫查詢邏輯
+  let supabaseQuery = supabase
+    .from('硬體貼文')
     .select('*')
-    .order('created_at', { ascending: false })
+    .ilike('title', '%[賣]%'); // 【核心：隱形過濾】強制只看賣家資料
+
+  // 3. 如果使用者有打字搜尋，就增加搜尋條件
+  if (query) {
+    supabaseQuery = supabaseQuery.ilike('title', `%${query}%`);
+  }
+
+  const { data: posts, error } = await supabaseQuery.order('created_at', { ascending: false });
 
   if (error) {
     return <div className="p-20 text-center text-red-500">連線錯誤：{error.message}</div>
@@ -19,12 +38,17 @@ export default async function Home() {
   return (
     <main className="min-h-screen bg-slate-50 p-6 md:p-12 font-sans text-slate-900">
       <div className="max-w-4xl mx-auto">
+        
+        {/* 標題與簡介區 */}
         <div className="mb-12 text-center">
           <h1 className="text-4xl md:text-6xl font-black mb-4 bg-gradient-to-r from-blue-700 to-indigo-500 bg-clip-text text-transparent tracking-tighter">
             🚀 3C 硬體價格監控站
           </h1>
           <p className="text-slate-400 font-medium">數據來源：PTT HardwareSale • 114 義大資工 林彤恩 (Tony)</p>
         </div>
+
+        {/* 4. 放置搜尋框零件 */}
+        <SearchInput />
         
         <div className="grid gap-6">
           {posts && posts.length > 0 ? (
@@ -46,8 +70,13 @@ export default async function Home() {
               </div>
             ))
           ) : (
-            <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
-              <p className="text-slate-400">目前資料庫回傳為空，請確認資料表名稱是否為「硬體貼文」</p>
+            // 5. 帥氣的查無資料提示
+            <div className="text-center py-20 bg-white rounded-[2.5rem] border border-dashed border-slate-200">
+              <p className="text-4xl mb-4">🛸</p>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">查無相關硬體資料</h3>
+              <p className="text-slate-400 italic">
+                學長，目前資料庫找不到關於「{query || ''}」的[賣]項資訊，要不要換個關鍵字？
+              </p>
             </div>
           )}
         </div>
