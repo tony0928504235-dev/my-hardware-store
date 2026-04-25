@@ -9,26 +9,33 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
+// --- 【SEO 網址產生工具】 ---
+// 這裡會把標題變成網址的一部分，例如：72-rtx-5080-strix
+function formatSlug(title: string) {
+  return title
+    .toLowerCase()
+    .replace(/\[賣\]/g, '') // 去掉 [賣]
+    .replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g, '') // 只保留中英文、數字，去掉特殊符號
+    .trim()
+    .replace(/\s+/g, '-') // 空格換成橫槓
+}
+
 export default async function Home({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
-  // 1. 獲取網址參數
   const params = await searchParams;
   const query = params.q;
 
-  // 2. 建立最基礎的查詢 (預設抓取所有資料)
   let supabaseQuery = supabase
     .from('硬體貼文')
     .select('*');
 
-  // 3. 【關鍵修正】只有當真的有打字搜尋時，才進行過濾
   if (query && query.trim() !== "") {
     supabaseQuery = supabaseQuery.ilike('title', `%${query}%`);
   }
 
-  // 4. 排序並執行查詢
   const { data: posts, error } = await supabaseQuery.order('created_at', { ascending: false });
 
   if (error) {
@@ -47,12 +54,12 @@ export default async function Home({
           <p className="text-slate-400">數據來源：PTT HardwareSale • 114 義大資工 林彤恩 (Tony)</p>
         </div>
 
-        {/* 搜尋框：永遠固定在上方 */}
+        {/* 搜尋框 */}
         <div className="mb-12">
           <SearchInput />
         </div>
         
-        {/* 列表區：確保資料一定會列出來 */}
+        {/* 列表區 */}
         <div className="grid gap-6">
           {query && (
             <div className="flex justify-between items-center px-4">
@@ -64,7 +71,11 @@ export default async function Home({
           {posts && posts.length > 0 ? (
             posts.map((post: any) => (
               <div key={post.id} className="bg-white p-7 rounded-[2rem] shadow-sm border border-slate-100 hover:shadow-xl hover:border-blue-200 transition-all duration-300 group">
-                <Link href={`/product/${post.id}`} className="flex flex-col md:flex-row justify-between items-start gap-4">
+                {/* --- 【修改重點：網址語意化連結】 --- */}
+                <Link 
+                  href={`/product/${post.id}-${formatSlug(post.title)}`} 
+                  className="flex flex-col md:flex-row justify-between items-start gap-4"
+                >
                   <div className="flex-1">
                     <h2 className="text-xl font-bold text-slate-800 group-hover:text-blue-600 transition-colors">
                       {post.title}
@@ -82,7 +93,6 @@ export default async function Home({
               </div>
             ))
           ) : (
-            // 只有在真的搜不到東西時才顯示
             <div className="text-center py-20 bg-white rounded-[2rem] border border-dashed border-slate-200">
               <p className="text-slate-400">找不到符合「{query}」的資料。是不是爬蟲還沒抓到？</p>
               <Link href="/" className="text-blue-500 underline mt-4 block">返回顯示全部資料</Link>
