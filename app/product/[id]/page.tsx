@@ -10,27 +10,35 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
+// --- 【關鍵：解析 Slug 工具】 ---
+// 因為網址現在長得像 "72-rtx-5080"，我們只拿橫槓前的 "72"
+function getRealId(slug: string) {
+  return slug.split('-')[0];
+}
+
 // 【SEO 動態標題】
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const { data: post } = await supabase.from('硬體貼文').select('title').eq('id', id).single()
+  const { id: slug } = await params
+  const realId = getRealId(slug); // 解析出真正的資料庫 ID
+
+  const { data: post } = await supabase.from('硬體貼文').select('title').eq('id', realId).single()
   return { title: `${post?.title || '硬體'} | PTT 二手行情監控站` }
 }
 
 export default async function ProductPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+  const { id: slug } = await params
+  const realId = getRealId(slug); // 解析出真正的資料庫 ID
   
-  // 3. 抓取資料庫數據 (含我們新加的 ai_analysis 欄位)
+  // 3. 使用真正的 realId 抓取資料庫數據
   const { data: post } = await supabase
     .from('硬體貼文')
     .select('*')
-    .eq('id', id)
+    .eq('id', realId)
     .single()
 
   // --- 【AI 智慧分析邏輯：資料庫快取進化版】 ---
   let aiAnalysis = post?.ai_analysis || "正在由 Tony AI 進行深度診斷...";
 
-  // 檢查：如果資料庫裡沒有分析過，才啟動 AI 流程
   if (post && !post.ai_analysis) {
     const MODEL_ID = "gemini-3.1-flash-lite-preview";
     
@@ -38,7 +46,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
       
       try {
-        console.log(`[Cache Miss] 正在為產品 #${id} 產生持久化分析...`);
+        console.log(`[Cache Miss] 正在為產品 #${realId} 產生持久化分析...`);
         
         const model = genAI.getGenerativeModel(
           { model: MODEL_ID },
@@ -53,17 +61,11 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
         const result = await model.generateContent(prompt);
         const responseText = result.response.text();
 
-        // 【關鍵步驟】將分析結果更新回 Supabase
-        const { error: updateError } = await supabase
+        // 使用 realId 更新回資料庫
+        await supabase
           .from('硬體貼文')
           .update({ ai_analysis: responseText })
-          .eq('id', id);
-
-        if (updateError) {
-          console.error("[資料庫更新失敗] 請檢查 RLS 權限:", updateError.message);
-        } else {
-          console.log(`[Cache Saved] 分析結果已成功存入資料庫。`);
-        }
+          .eq('id', realId);
 
         return responseText;
         
@@ -75,10 +77,8 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
 
     aiAnalysis = await fetchAndStoreAI();
   } else if (post?.ai_analysis) {
-    // 如果資料庫本來就有，Log 會顯示直接讀取快取
-    console.log(`[Cache Hit] 產品 #${id} 已有快取紀錄，節省 1 次 API 額度。`);
+    console.log(`[Cache Hit] 產品 #${realId} 已有快取紀錄。`);
   }
-  // --- 【AI 邏輯結束】 ---
 
   if (!post) return <div className="min-h-screen bg-[#0b0e14] text-white flex items-center justify-center">404 - 找不到資料</div>;
 
@@ -98,7 +98,8 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
             <span className="bg-blue-600/10 text-blue-400 border border-blue-500/30 px-3 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase">
               {post.product_type || 'HARDWARE'}
             </span>
-            <span className="text-slate-600 font-mono text-xs uppercase tracking-tighter">SERIAL: #{id}</span>
+            {/* 這裡顯示 realId 讓後台對帳更方便 */}
+            <span className="text-slate-600 font-mono text-xs uppercase tracking-tighter">SERIAL: #{realId}</span>
           </div>
 
           <h1 className="text-4xl md:text-6xl font-black text-white mb-12 italic leading-tight tracking-tighter">
@@ -122,7 +123,6 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
             </div>
           </div>
 
-          {/* Tony AI 診斷區塊 */}
           <div className="bg-gradient-to-br from-blue-600/10 to-indigo-600/10 p-8 rounded-[2rem] border border-blue-500/30 mb-10 relative overflow-hidden group">
              <div className="flex items-center gap-2 mb-4">
                 <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse shadow-[0_0_10px_#3b82f6]" />
@@ -131,7 +131,6 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
              <p className="text-xl text-slate-200 leading-relaxed font-medium italic relative z-10">
                 "{aiAnalysis}"
              </p>
-             <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 -translate-y-1/2 translate-x-1/2 blur-3xl group-hover:bg-blue-500/10 transition-all duration-700" />
           </div>
 
           <div className="space-y-6">
@@ -142,9 +141,8 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
             >
               前往 PTT 原始貼文驗證 ↗
             </a>
-            
-            <p className="text-slate-600 text-[10px] text-center leading-relaxed italic px-4">
-              * 系統已實作資料庫快取技術，AI 建議僅在首次抓取時消耗額度。目前穩定運行於 Gemini 3.1 Flash Lite 通道。
+            <p className="text-slate-600 text-[10px] text-center italic">
+              * 系統已實作 SEO Slugs 與資料庫快取技術。
             </p>
           </div>
         </div>
